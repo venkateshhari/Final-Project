@@ -1,0 +1,157 @@
+---
+title: " **Final Project on Machine Learning Course** "
+author: " **Hari Venkatesh** "
+date: "April 08, 2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+The main obejective of this project is to predict the manner in which people did exercise. Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively.
+
+# Prerequisite
+```{r Packages, warning=FALSE, message=FALSE, echo=TRUE}
+# load R - packages for ML algorithms
+library(randomForest)
+library(tidyverse)
+library(caret)
+```
+
+# Data Source
+
+For the prediction analysis I collected two datasets from the below sources:
+
+1) The training dataset: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+2) The test dataset: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+# Data Loading and Shape
+
+```{r load data, warning=FALSE, message=FALSE, echo=TRUE}
+
+training = read.csv("./pml-training.csv",na.strings=c("NA","#DIV/0!",""))
+testing = read.csv("./pml-testing.csv",na.strings=c("NA","#DIV/0!",""))
+
+# Data shape
+dim(training)
+dim(testing)
+table(training$classe)
+
+# Take a look at the dataset
+head(training[0:5])
+#head(testing[0:5])
+```
+# Predictors Selection
+
+The slection of specific predictors is based on cleaning the near zero variance predictors and missing observations.
+
+```{r Cleaning, warning=FALSE, message=FALSE, echo=TRUE}
+# remove NA columns for the training and testing data
+comps <- complete.cases(t(training)) & complete.cases(t(testing))
+traindata <- training[,comps]
+testdata  <- testing[,comps]
+
+# remove columns with data that isn't useful
+traindata <- traindata[,-c(1,3,4,5,6,7)]
+testdata <- testdata[,-c(1,3,4,5,6,7)]
+```
+
+# Cross-Validation Analysis
+
+Now, I perform the cross-validation by spliting the data into train and test set:
+
+1) The train dataset consist of 70% of observations and 
+2) The test datset includes the rest 30% of observations. The evaulation of our trained models will testing using this dataset.
+
+```{r cross-validation, warning=FALSE, message=FALSE, echo=TRUE}
+# data splitting
+set.seed(12345)
+inTrain <- createDataPartition(traindata$classe, p=0.7, list=FALSE)
+traindata2 <- traindata[inTrain,]
+testing.set <- traindata[-inTrain,]
+```
+
+# Prediction Algorithms 
+
+In this project I use two machine learning algorithms to predict the excercise.
+
+1) Decision Treee and 
+2) Random Forest
+
+# 1. Prediction with Decision Trees
+
+```{r prediction with trees, warning=FALSE, message=FALSE, echo=TRUE}
+
+# Build model
+library(rpart)
+set.seed(12345)
+tree.fit = train(y = traindata2$classe,
+                 x = traindata2[,-ncol(traindata2)],
+                 method = "rpart")
+
+# Plot classification tree
+rattle::fancyRpartPlot(
+  tree.fit$finalModel
+)
+
+# Predictions with rpart model
+pred.tree = predict(tree.fit, testing.set[,-ncol(testing.set)])
+
+# Get results (Accuracy, etc.)
+confusionMatrix(pred.tree, testing.set$classe)
+```
+
+# 2. Prediction with Random forest
+
+Now I will use the random forest model.
+
+```{r random forest, warning=FALSE, message=FALSE, echo=TRUE}
+# Build model
+set.seed(12345)
+rf.fit = randomForest(
+  classe ~ .,
+  data = traindata2,
+  ntree = 250)
+# Plot the Random Forests model
+plot(rf.fit)
+
+# Predict with random forest model
+pred2 = predict(
+  rf.fit,
+  testing.set[,-ncol(testing.set)]
+)
+
+# Get results (Accuracy, etc.)
+confusionMatrix(pred2, testing.set$classe)
+
+```
+
+# Results Comparision
+
+As we expected the random forest model is performed better than the decision tree. Moreover, the accuracy of the former model is better than latter. Therefore, we selected the random forest model to find the choice of 20 observations in original testing dataset.
+
+```{r pml-testing predictions, warning=FALSE, message=FALSE, echo=TRUE}
+# find the predictions of 20 observations from the original testing dataset
+
+pred.validation = predict(rf.fit, testing)
+pred.validation
+```
+
+# Save the Prediction Results
+```{r saving results, warning=FALSE, message=FALSE, echo=TRUE, eval = FALSE}
+testing$pred.classe = pred.validation
+
+write.table(
+  testing,
+  file = "testing_with_predictions.csv",
+  quote = F
+)
+
+```
+## Reference
+Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6.
